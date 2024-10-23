@@ -9,15 +9,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-# install.packages("rmarkdown")
-# install.packages("tidyverse")
-# install.packages("devtools")
-# install.packages("here")
-# install.packages("lemon")
 # devtools::install_github("https://github.com/correadarosaj/Economon")
+library(Economon)
+
 library(tidyverse)
 library(here)
-library(Economon)
 library(lemon)
 ```
 
@@ -64,8 +60,8 @@ jpeg(here("Plots", "Figure 1b - Buyer Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
@@ -95,8 +91,8 @@ jpeg(here("Plots", "Figure 1c - Seller Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
@@ -129,8 +125,8 @@ jpeg(here("Plots", "Figure 1d (Shaded) - Combined Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
@@ -167,8 +163,8 @@ jpeg(here("Plots", "Figure 1d (Line) - Combined Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
@@ -208,8 +204,8 @@ jpeg(here("Plots", "Figure 2 (Line) - Paneled Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
@@ -253,8 +249,8 @@ jpeg(here("Plots", "Figure 2 (Shaded) - Paneled Demand Curve.jpeg"),
     geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.25, 4, 64)),
-                       labels = c("$.25", "$4", "$64")) +
+                       breaks = log10(c(.10, 5, 250)),
+                       labels = c("$.10", "$5", "$250")) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +

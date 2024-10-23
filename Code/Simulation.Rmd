@@ -1,0 +1,630 @@
+---
+title: "Simulation"
+output: html_document
+---
+
+
+# ------------------------------------------------------
+# Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# devtools::install_github("https://github.com/correadarosaj/Economon")
+library(Economon)
+
+library(tidyverse)
+library(here)
+library(lemon)
+library(foreach)
+library(doParallel)
+library(ggpp)
+library(ggimage)
+```
+
+# renv Snapshot
+```{r, eval = F}
+renv::snapshot()
+```
+
+
+# ------------------------------------------------------
+# Simulation
+## Setup
+```{r}
+#--------------------------------------------------------------------
+# SETUP CONDITIONS
+commodities = data.frame(b0          = .00075,
+                         deprivation = c("Hi", "Lo", "Hi", "Lo"),
+                         b1          = c(-.5, -.075, -.5, -.075),
+                         satiation   = c("Hi", "Hi", "Lo", "Lo"),
+                         b2          = c(4, 4, 1, 1))
+sd_b1 = .1 # controls variability for deprivation parameter
+sd_b2 = 1  # controls variability for satiation parameter
+
+
+#--------------------------------------------------------------------
+# FUNCTION FOR MAKING LABELS
+make_condition_label = function(df, stacked = T){
+  if(stacked){
+    new_df = df %>% 
+      mutate(condition =
+             factor(condition, 
+                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
+                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    ordered = T),
+           condition_lab =
+             factor(condition, 
+                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
+                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    labels = c("Low Dep\nLow Sat", "High Dep\nLow Sat",
+                               "Low Dep\nHigh Sat", "High Dep\nHigh Sat"),
+                    ordered = T))
+  } else {
+    new_df = df %>% 
+      mutate(condition =
+             factor(condition, 
+                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
+                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    ordered = T),
+           condition_lab =
+             factor(condition, 
+                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
+                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    labels = c("Low Dep Low Sat", "High Dep Low Sat",
+                               "Low Dep High Sat", "High Dep High Sat"),
+                    ordered = T))
+  }
+  return(new_df)
+}
+
+
+#--------------------------------------------------------------------
+# SETUP FOR SIMULATION
+clusters = makeCluster(4)
+burnin = 200
+n_trials = 500
+n_simulations = 100
+```
+
+
+## Run Simulation
+```{r, eval = F}
+#--------------------------------------------------------------------
+# SIMULATION
+set.seed(20240604)
+registerDoParallel(clusters)
+full_population = 
+  foreach(commodity = 1:nrow(commodities), .combine = "rbind") %dopar% {
+    require(tidyverse)
+    require(Economon)
+    require(foreach)
+    foreach(i = 1:n_simulations, .combine = "rbind") %do% {
+      cur_parameters =
+        data.frame(alpha_b0 = exp(rnorm(1, mean = log(commodities$b0[commodity]), sd = 0)),
+                   alpha_b1 = rnorm(1, mean = commodities$b1[commodity], sd = sd_b1),
+                   alpha_b2 = rnorm(1, mean = commodities$b2[commodity], sd = sd_b2)) %>% 
+        mutate(alpha_b1 = case_when(alpha_b1 >= 0 | alpha_b1 <= -1 ~ commodities$b1[commodity], T ~ alpha_b1),
+               alpha_b2 = case_when(alpha_b2 <= 0 ~ commodities$b2[commodity], T ~ alpha_b2))
+      
+      
+      generate_market(
+        n_trials = n_trials+burnin,
+        condition = paste(commodities$deprivation[commodity], "Dep (B1)",
+                          commodities$satiation[commodity], "Sat (B2)"),
+        alpha_b0 = cur_parameters$alpha_b0, alpha_s0 = .005,
+        alpha_b1 = cur_parameters$alpha_b1,
+        alpha_b2 = cur_parameters$alpha_b2) %>% 
+        mutate(simulation = i)
+    }
+  }
+stopCluster(clusters)
+
+
+#--------------------------------------------------------------------
+# SAVE SIMULATION
+saveRDS(full_population, here("Data",  "Full_Population.RDS"))
+```
+
+
+```{r}
+full_population = readRDS(here("Data",  "Full_Population.RDS"))
+```
+
+
+## Check Parameters
+```{r, eval = F}
+full_population %>% 
+  group_by(condition, simulation) %>% 
+  reframe(alpha_b1 = mean(alpha_b1),
+          alpha_b2 = mean(alpha_b2)) %>%
+  pivot_longer(c("alpha_b1", "alpha_b2"), names_to = "alpha_type", values_to = "Alpha Value") %>% 
+  mutate(alpha_type = case_when(alpha_type == "alpha_b1" ~ "Alpha B1", T ~ "Alpha B2")) %>% 
+  select(Condition = condition, Simulation = simulation, everything()) %>% 
+  ggplot(aes(x = Simulation, y = `Alpha Value`, color = Condition)) +
+    geom_line() +
+    theme_classic() +
+    facet_rep_grid(alpha_type~., scales = "free")
+```
+
+
+## Subset Participants
+```{r}
+population = full_population %>% 
+  mutate(trial = trial - burnin,
+         transaction = case_when(transaction == 1 ~ "Successful Transaction",
+                                 T ~ "Failed Transaction")) %>%
+  filter(trial <= 200) %>%  # remove extra samples
+  filter(trial > 0)         # remove burn-in
+
+individuals = commodities %>% 
+  mutate(condition = paste(deprivation, "Dep (B1)",
+                           satiation, "Sat (B2)")) %>% 
+  left_join(population) %>%
+  mutate(b1_diff = b1-alpha_b1,
+         b2_diff = b2-alpha_b2) %>% 
+  group_by(condition) %>% 
+  mutate(z_b1_diff = (mean(b1_diff) - b1_diff) / sd(b1_diff),
+         z_b2_diff = (mean(b2_diff) - b2_diff) / sd(b2_diff),
+         error = abs(z_b1_diff) + abs(z_b2_diff),
+         min_error = min(error)) %>%
+  filter(error == min_error) %>% 
+  select(-c(b1_diff, b2_diff, z_b1_diff, z_b2_diff, error, min_error))
+```
+
+
+# ------------------------------------------------------
+# Figure 3: Sequential Demand Curves (w/o Seller)
+## Make Demand Data
+```{r}
+sequence_data = individuals %>% 
+  filter(condition == "Hi Dep (B1) Hi Sat (B2)" & trial %in% 1:6 |
+         condition == "Hi Dep (B1) Lo Sat (B2)" & trial %in% 1:6 |
+         condition == "Lo Dep (B1) Hi Sat (B2)" & trial %in% 19:24 |
+         condition == "Lo Dep (B1) Lo Sat (B2)" & trial %in% 1:6) %>%
+  group_by(condition) %>% 
+  mutate(new_trial = rank(trial))
+
+price_ranges = c(.01, 1000)
+sequential_demand = data.frame()
+previous_demand = data.frame()
+
+for(i in 1:6){
+  for(cur_condition in unique(individuals$condition)){
+    cur_alpha_B = 
+      filter(sequence_data, new_trial == i & condition == cur_condition)$buyer_alpha
+    cur.transaction = 
+      str_remove(filter(sequence_data, new_trial == i & condition == cur_condition)$transaction, " Transaction")
+    
+    current_demand =
+      data.frame(trial = i, alpha_B = cur_alpha_B,
+                 price = 10^(seq(log10(price_ranges[1]), log10(price_ranges[2]), length.out = 100)),
+                 condition = cur_condition, transaction = cur.transaction) %>% 
+      mutate(Q = calculate_QB(price, alpha_B = alpha_B),
+             logQ = log10(Q), log_price = log10(price),
+             alpha_B = format(cur_alpha_B, scientific = T, digits = 2))
+    previous_demand = bind_rows(mutate(current_demand, trial = i-1),
+                                previous_demand) %>% 
+      filter(trial > 0)
+    sequential_demand = bind_rows(sequential_demand,
+                                  current_demand) %>% 
+      filter(trial <= 5)
+  }
+}
+```
+
+
+## Letters for Transaction Success/Fail
+```{r}
+jpeg(here("Plots", "Figure 3 (Letters) - Person-Level Sequential Demand Curves.jpeg"),
+       width = 14.6, height = 11, units = "cm", res = 300)
+  sequential_demand %>% 
+    make_condition_label() %>% 
+    mutate(condition_lab = case_when(trial == 5 ~ condition_lab),
+           transaction = case_when(transaction == "Successful" ~ "S", T ~ "F")) %>% 
+    ggplot(aes(x = log_price, color = condition)) +
+      # GEOMS
+      geom_text_npc(aes(npcx = "left", npcy = "bottom", label = transaction)) +
+      geom_text_npc(aes(npcx = "right", npcy = "top", label = condition_lab), size = 2.5, hjust = 1) +
+      geom_line(aes(y = Q)) +
+      geom_line(data = make_condition_label(previous_demand), aes(y = Q), linetype = "dashed") +
+      geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+      # SCALES
+      scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
+                         breaks = log10(c(.10, 5, 250)),
+                         labels = c("$.10", "$5", "$250")) +
+      scale_y_continuous(limits = c(0,100), expand = expansion(add = c(0, 2.5)),
+                         breaks = c(0, 50, 100),
+                         labels = c("0%", "50%", "100%")) +
+      scale_linetype_manual(values = c("solid", "dashed")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # THEMES
+      labs(x = "Price/Commodity", y = "P(Buy)") +
+      theme_classic() +
+      theme(legend.position = "none",
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.y = element_blank(),
+            axis.text = element_text(size = 9, color = "black"),
+            axis.title = element_text(size = 12),
+            panel.spacing.x = unit(.15, "cm"),
+            panel.spacing.y = unit(.3, "cm"),
+            plot.margin = unit(c(.15, .2, .075, .3), "cm")) +
+      facet_rep_grid(condition~trial,
+                     labeller = labeller(trial = c("1" = "Trial 1", "2" = "Trial 2",
+                                                   "3" = "Trial 3", "4" = "Trial 4",
+                                                   "5" = "Trial 5", "6" = "Trial 6")))
+dev.off()
+```
+
+
+## Symbols for Transaction Success/Fail
+```{r}
+jpeg(here("Plots", "Figure 3 (Symbols) - Person-Level Sequential Demand Curves.jpeg"),
+       width = 14.6, height = 11, units = "cm", res = 300)
+  sequential_demand %>% 
+    make_condition_label() %>% 
+    mutate(condition_lab = case_when(trial == 5 ~ condition_lab),
+           transaction_image = case_when(transaction == "Successful" ~
+                                           here("Plots", "Successful Transaction Symbol.tif"),
+                                         transaction == "Failed" ~
+                                           here("Plots", "Failed Transaction Symbol.tif"))) %>% 
+    ggplot(aes(x = log_price, color = condition)) +
+      # GEOMS
+      geom_image(aes(x = log10(.0375), y = 12.5, image = transaction_image), size = .2,
+                 inherit.aes = F) +
+      geom_text_npc(aes(npcx = "right", npcy = "top", label = condition_lab),
+                    check_overlap = T, size = 2.5, hjust = 1) +
+      geom_line(aes(y = Q)) +
+      geom_line(data = make_condition_label(previous_demand), aes(y = Q), linetype = "dashed") +
+      geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+      # SCALES
+      scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
+                         breaks = log10(c(.10, 5, 250)),
+                         labels = c("$.10", "$5", "$250")) +
+      scale_y_continuous(limits = c(0,100), expand = expansion(add = c(0, 2.5)),
+                         breaks = c(0, 50, 100),
+                         labels = c("0%", "50%", "100%")) +
+      scale_linetype_manual(values = c("solid", "dashed")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # THEMES
+      labs(x = "Price/Commodity", y = "P(Buy)") +
+      theme_classic() +
+      theme(legend.position = "none",
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            strip.text.y = element_blank(),
+            axis.text = element_text(size = 9, color = "black"),
+            axis.title = element_text(size = 12),
+            panel.spacing.x = unit(.15, "cm"),
+            panel.spacing.y = unit(.3, "cm"),
+            plot.margin = unit(c(.15, .2, .075, .3), "cm")) +
+      facet_rep_grid(condition~trial,
+                     labeller = labeller(trial = c("1" = "Trial 1", "2" = "Trial 2",
+                                                   "3" = "Trial 3", "4" = "Trial 4",
+                                                   "5" = "Trial 5", "6" = "Trial 6")))
+dev.off()
+```
+
+
+# ------------------------------------------------------
+# Figure 4: Person-Level Purchase Probabilities
+## Color 1st Trials
+```{r, eval = T}
+subsetted_individuals = individuals %>% 
+  filter(trial <= 6) %>% 
+  make_condition_label()
+
+jpeg(here("Plots", "Figure 4 (Color 1st Trials) - Person-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  individuals %>% 
+    make_condition_label() %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab)) +
+      # geoms
+      geom_line(color = "black") +
+      geom_point(aes(shape = transaction, size = transaction), fill = "white", color = "black") +
+      geom_line(data = make_condition_label(subsetted_individuals)) +
+      geom_point(data = make_condition_label(subsetted_individuals),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+## Black 1st Trials
+```{r, eval = T}
+subsetted_individuals = individuals %>% 
+  filter(trial <= 6) %>% 
+  make_condition_label()
+
+jpeg(here("Plots", "Figure 4 (Black 1st Trials) - Person-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  individuals %>% 
+    make_condition_label() %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab)) +
+      # geoms
+      geom_line() +
+      geom_point(aes(shape = transaction, size = transaction), fill = "white") +
+      geom_line(data = make_condition_label(subsetted_individuals), color = "black") +
+      geom_point(data = make_condition_label(subsetted_individuals),
+                 aes(shape = transaction, size = transaction),
+                 fill = "white", color = "black") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+## Full Color
+```{r, eval = T}
+subsetted_individuals = individuals %>% 
+  filter(trial <= 6) %>% 
+  make_condition_label()
+
+jpeg(here("Plots", "Figure 4 (Full Color) - Person-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  individuals %>% 
+    make_condition_label() %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab)) +
+      # geoms
+      geom_line(alpha = .5) +
+      geom_point(aes(shape = transaction, size = transaction), fill = "white", alpha = .5) +
+      geom_line(data = make_condition_label(subsetted_individuals)) +
+      geom_point(data = make_condition_label(subsetted_individuals),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+# ------------------------------------------------------
+# Figure 5: Population-Level Purchase Probabilities
+## No Aggregating
+```{r, eval = T}
+jpeg(here("Plots", "Figure 5 (No Aggregating) - Population-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  population %>% 
+    make_condition_label(stacked = F) %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab, fill = condition_lab)) +
+      # geoms
+      geom_line(alpha = .5) +
+      geom_line(data = make_condition_label(individuals, stacked = F)) +
+      geom_point(data = make_condition_label(individuals, stacked = F),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      scale_fill_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+## Ind Faded
+```{r, eval = T}
+jpeg(here("Plots", "Figure 5 (Lines) - Population-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  population %>% 
+    group_by(trial, condition) %>% 
+    reframe(sd.prob.buy = sd(prob.buy), prob.buy = mean(prob.buy),
+            lower = prob.buy - sd.prob.buy, upper = prob.buy + sd.prob.buy,
+            lower = case_when(lower < 0 ~ 0, T ~ lower), upper = case_when(upper > 1 ~ 1, T ~ upper)) %>%
+    make_condition_label(stacked = F) %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab, fill = condition_lab)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower, ymax = upper),
+                  alpha = .25, color = "transparent") +
+      geom_line(linewidth = 1, alpha = .5) +
+      geom_line(data = make_condition_label(individuals, stacked = F)) +
+      geom_point(data = make_condition_label(individuals, stacked = F),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      scale_fill_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+## Quantiles
+```{r, eval = T}
+jpeg(here("Plots", "Figure 5 (Quantiles) - Population-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  population %>% 
+    group_by(trial, condition) %>% 
+    reframe(lower37.5 = quantile(prob.buy, .125), upper37.5 = quantile(prob.buy, .875),
+            lower25 = quantile(prob.buy, .25), upper25 = quantile(prob.buy, .75),
+            lower12.5 = quantile(prob.buy, .375), upper12.5 = quantile(prob.buy, .625),
+            prob.buy = median(prob.buy)) %>%
+    make_condition_label(stacked = F) %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab, fill = condition_lab)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower37.5, ymax = upper37.5),
+                  alpha = .2, color = "transparent") +
+      geom_ribbon(aes(ymin = lower25, ymax = upper25),
+                  alpha = .3, color = "transparent") +
+      geom_ribbon(aes(ymin = lower12.5, ymax = upper12.5),
+                  alpha = .4, color = "transparent") +
+      geom_line(linewidth = .75, alpha = .5) +
+      geom_line(data = make_condition_label(individuals, stacked = F)) +
+      geom_point(data = make_condition_label(individuals, stacked = F),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      scale_fill_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+## Ind Dots + Pop Lines
+```{r, eval = T}
+jpeg(here("Plots", "Figure 5 (Ind Dots + Pop Lines) - Population-Level Purchase Probabilities.jpeg"),
+       width = 7, height = 13, units = "cm", res = 300)
+  population %>% 
+    group_by(trial, condition) %>% 
+    reframe(sd.prob.buy = sd(prob.buy), prob.buy = mean(prob.buy),
+            lower = prob.buy - sd.prob.buy, upper = prob.buy + sd.prob.buy,
+            lower = case_when(lower < 0 ~ 0, T ~ lower), upper = case_when(upper > 1 ~ 1, T ~ upper)) %>%
+    make_condition_label(stacked = F) %>%
+    ggplot(aes(x = trial, y = prob.buy, color = condition_lab, fill = condition_lab)) +
+      # geoms
+      geom_ribbon(aes(ymin = lower, ymax = upper),
+                  alpha = .25, color = "transparent") +
+      geom_line() +
+      geom_point(data = make_condition_label(individuals, stacked = F),
+                 aes(shape = transaction, size = transaction), fill = "white") +
+      # scales
+      scale_shape_manual(values = c(21, 16)) +
+      scale_size_manual(values = c(1, 1.25)) +
+      scale_x_continuous(limits = c(0,200),
+                         expand = expansion(add = c(1.5, 1.5)), n.breaks = 5) +
+      scale_y_continuous(limits = c(0,1), expand = expansion(add = c(0, .025)),
+                         breaks = c(0, .5, 1),
+                         labels = c("0%", "50%", "100%")) +
+      scale_color_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      scale_fill_manual(values = c("purple2", "goldenrod3", "green3", "dodgerblue3")) +
+      # themes
+      labs(x = "Transaction", y = "P(Buy)") +
+      coord_cartesian(clip = "off") +
+      theme_classic() +
+      theme(legend.position = "none",
+            plot.margin = unit(c(.25, .3, .1, .3), "cm"),
+            panel.spacing = unit(.25, "cm"),
+            axis.text = element_text(color = "black"),
+            strip.text = element_text(hjust = 0),
+            strip.background = element_rect(fill = "transparent", colour = "transparent"),
+            panel.background = element_rect(fill = "transparent", colour = "transparent"),
+            plot.background = element_rect(fill = "transparent", color = "transparent")) +
+      guides(color = F, size = F, shape = guide_legend(override.aes = list(size =  2, stroke = .5))) +
+      facet_rep_wrap(condition_lab~., nrow = 4)
+dev.off()
+```
+
+
+# ------------------------------------------------------
+```{r}
+
+```
+
