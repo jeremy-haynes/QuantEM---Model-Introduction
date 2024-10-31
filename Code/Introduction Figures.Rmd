@@ -29,7 +29,7 @@ renv::snapshot()
 price_ranges = c(.01, 1000)
 buyer_seller_demand = data.frame(agent = c("buyer", "seller"),
                                  baseline = c(.00025, .0025)) %>% 
-  mutate(increase = baseline - .75*baseline,
+  mutate(increase = baseline - .85*baseline,
          decrease = baseline + 5*baseline) %>%
   pivot_longer(c("baseline", "increase", "decrease"),
                names_to = "condition", values_to = "alpha") %>% 
@@ -56,8 +56,16 @@ jpeg(here("Plots", "Figure 1b - Buyer Demand Curve.jpeg"),
     filter(condition == "baseline") %>% 
     ggplot(aes(x = log_price, y = Q_buyer)) +
     # ADD GEOMS
-    geom_line() +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+    geom_line(linewidth = .75) +
+    geom_segment(aes(x = log10(100), xend = log10(.5), y = 100, yend = 100),
+                 arrow = arrow(length = unit(.25, "cm")), linewidth = .75) +
+    geom_text(aes(x = log10(125), y = 100, label = paste(expression("Q[B0]"))),
+              parse = T, hjust = 0, vjust = .5) +
+    geom_segment(aes(x = log10(100), xend = log10(10), y = 50, yend = 50),
+                 arrow = arrow(length = unit(.25, "cm")), linewidth = .75) +
+    geom_text(aes(x = log10(125), y = 50, label = paste(expression("\u03B1[B]"))),
+              parse = T, hjust = 0, vjust = .5) +
+    # geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
                        breaks = log10(c(.10, 5, 250)),
@@ -68,8 +76,10 @@ jpeg(here("Plots", "Figure 1b - Buyer Demand Curve.jpeg"),
     # ADD THEMES
     labs(x = "Price/Commodity", y = "P(Buy)") +
     theme_classic() +
-    theme(axis.text.x = element_text(size = 10, color = "black"),
+    theme(axis.text.x = element_blank(),
           axis.text.y = element_text(size = 10, color = "black"),
+          axis.line   = element_line(linewidth = .75),
+          axis.ticks  = element_line(linewidth = .75, color = "black"),
           axis.title  = element_text(size = 12),
           plot.margin = unit(c(.2, .1, .05, .05), "cm")) +
       coord_cartesian(clip = "off")
@@ -80,15 +90,28 @@ dev.off()
 
 ## Figure 1c: Seller Demand Curves
 ```{r}
-jpeg(here("Plots", "Figure 1c - Seller Demand Curve.jpeg"),
+jpeg(here("Plots", "Figure 1c (alt) - Seller Demand Curve.jpeg"),
      width = 5.5, height = 4, units = "cm", res = 300)
 
   buyer_seller_demand %>% 
     filter(condition == "baseline") %>% 
     ggplot(aes(x = log_price, y = Q_seller)) +
     # ADD GEOMS
-    geom_line(color = "gray55") +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+    geom_line(color = "gray55", linewidth = .75) +
+    geom_vline(xintercept = log10(calculate_price(.0025)),
+               linetype = "dotted", linewidth = .75) +
+    geom_segment(aes(x = log10(.09), xend = log10(25), y = 100, yend = 100),
+                 arrow = arrow(length = unit(.25, "cm")), linewidth = .75) +
+    geom_text(aes(x = log10(.08), y = 100, label = paste(expression("Q[S0]"))),
+              parse = T, hjust = 1, vjust = .5) +
+    geom_segment(aes(x = log10(.09), xend = log10(1), y = 65, yend = 65),
+                 arrow = arrow(length = unit(.25, "cm")), linewidth = .75) +
+    geom_text(aes(x = log10(.08), y = 65, label = "P"),
+              parse = T, hjust = 1, vjust = .5) +
+    geom_segment(aes(x = log10(.09), xend = log10(.5), y = 30, yend = 30),
+                 arrow = arrow(length = unit(.25, "cm")), linewidth = .75) +
+    geom_text(aes(x = log10(.08), y = 30, label = paste(expression("\u03B1[S]"))),
+              parse = T, hjust = 1, vjust = .5) +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
                        breaks = log10(c(.10, 5, 250)),
@@ -99,68 +122,33 @@ jpeg(here("Plots", "Figure 1c - Seller Demand Curve.jpeg"),
     # ADD THEMES
     labs(x = "Price/Commodity", y = "P(Sell)") +
     theme_classic() +
-    theme(axis.text.x = element_text(size = 10, color = "black"),
+    theme(axis.text.x = element_blank(),
           axis.text.y = element_text(size = 10, color = "black"),
+          axis.line   = element_line(linewidth = .75),
+          axis.ticks  = element_line(linewidth = .75, color = "black"),
           axis.title  = element_text(size = 12),
           plot.margin = unit(c(.2, .1, .05, .05), "cm")) +
       coord_cartesian(clip = "off")
   
-dev.off()
-```
-
-
-## Figure 1d (Shaded): Combined Demand Curves
-```{r}
-jpeg(here("Plots", "Figure 1d (Shaded) - Combined Demand Curve.jpeg"),
-     width = 8, height = 4, units = "cm", res = 300)
-
-  buyer_seller_demand %>% 
-    filter(condition == "baseline") %>%
-    ggplot(aes(x = log_price)) +
-    # ADD GEOMS
-    geom_line(aes(y = Q_buyer, color = "a")) +
-    geom_line(aes(y = Q_seller, color = "b")) +
-    geom_ribbon(aes(ymin = 0, ymax = Q_joint, color = "c"), alpha = .25) +
-    geom_line(aes(y = Q_joint), linewidth = .25) +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
-    # ADD SCALES
-    scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
-                       breaks = log10(c(.10, 5, 250)),
-                       labels = c("$.10", "$5", "$250")) +
-    scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
-                       breaks = c(0, 50, 100),
-                       labels = c("0", "50%", "100%")) +
-    scale_color_manual("agent", values = c("a" = "black", "b" = "gray55", "c" = "black"),
-                       labels = c("Buy", "Sell", "Transaction")) +
-    # ADD THEMES
-    labs(x = "Price/Commodity", y = "Probability") +
-    theme_classic() +
-    theme(legend.position   = c(.99, .63),
-          legend.title      = element_blank(),
-          legend.background = element_rect(fill = "transparent", color = "transparent"),
-          axis.text.x       = element_text(size = 10, color = "black"),
-          axis.text.y       = element_text(size = 10, color = "black"),
-          axis.title        = element_text(size = 12),
-          plot.margin       = unit(c(.2, 1.5, .05, .05), "cm")) +
-    coord_cartesian(clip = "off")
   
 dev.off()
 ```
 
 
-## Figure 1d (Line): Combined Demand Curves
+## Figure 1d: Combined Demand Curves
 ```{r}
-jpeg(here("Plots", "Figure 1d (Line) - Combined Demand Curve.jpeg"),
+jpeg(here("Plots", "Figure 1d - Combined Demand Curve.jpeg"),
      width = 8, height = 4, units = "cm", res = 300)
 
   buyer_seller_demand %>% 
     filter(condition == "baseline") %>%
     ggplot(aes(x = log_price)) +
     # ADD GEOMS
-    geom_line(aes(y = Q_buyer, color = "a")) +
-    geom_line(aes(y = Q_seller, color = "b")) +
-    geom_line(aes(y = Q_joint, color = "c")) +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+    geom_line(aes(y = Q_buyer, color = "a"), linewidth = .75) +
+    geom_line(aes(y = Q_seller, color = "b"), linewidth = .75) +
+    geom_line(aes(y = Q_joint, color = "c"), linewidth = .75) +
+    # geom_vline(xintercept = log10(calculate_price(.0025)),
+    #            linetype = "dotted", linewidth = .75) +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
                        breaks = log10(c(.10, 5, 250)),
@@ -176,8 +164,10 @@ jpeg(here("Plots", "Figure 1d (Line) - Combined Demand Curve.jpeg"),
     theme(legend.position   = c(.99, .63),
           legend.title      = element_blank(),
           legend.background = element_rect(fill = "transparent", color = "transparent"),
-          axis.text.x       = element_text(size = 10, color = "black"),
+          axis.text.x       = element_blank(),
           axis.text.y       = element_text(size = 10, color = "black"),
+          axis.line         = element_line(linewidth = .75),
+          axis.ticks        = element_line(linewidth = .75, color = "black"),
           axis.title        = element_text(size = 12),
           plot.margin       = unit(c(.2, 1.5, .05, .05), "cm")) +
     coord_cartesian(clip = "off")
@@ -188,20 +178,36 @@ dev.off()
 
 # ------------------------------------------------------
 # Figure 2: Paneled Demand Curves
-## Line
 ```{r}
-jpeg(here("Plots", "Figure 2 (Line) - Paneled Demand Curve.jpeg"),
-     width = 14.6, height = 10, units = "cm", res = 300)
+# FOR DEPICTING BASELINE WITH DASHED LINE IN 2ND AND 3RD ROWS
+baseline = bind_rows(mutate(filter(buyer_seller_demand, condition == "baseline"),
+                            condition = "decrease", column = "Buyer", Q_seller = NA, Q_joint = NA),
+                     mutate(filter(buyer_seller_demand, condition == "baseline"),
+                            condition = "decrease", column = "Seller", Q_buyer = NA, Q_joint = NA),
+                     mutate(filter(buyer_seller_demand, condition == "baseline"),
+                            condition = "increase", column = "Buyer", Q_seller = NA, Q_joint = NA),
+                     mutate(filter(buyer_seller_demand, condition == "baseline"),
+                            condition = "increase", column = "Seller", Q_buyer = NA, Q_joint = NA))
+
+jpeg(here("Plots", "Figure 2 - Paneled Demand Curve.jpeg"),
+     width = 14.6, height = 12, units = "cm", res = 300)
 
   bind_rows(mutate(buyer_seller_demand, column = "Buyer", Q_seller = NA, Q_joint = NA),
             mutate(buyer_seller_demand, column = "Joint"),
             mutate(buyer_seller_demand, column = "Seller", Q_buyer = NA, Q_joint = NA)) %>%
+    mutate(x_int = case_when(condition == "baseline" ~ log10(calculate_price(.0025)),
+                             condition == "increase" ~ log10(calculate_price(.000375)),
+                             condition == "decrease" ~ log10(calculate_price(.015))),
+           x_int = case_when(column == "Buyer" ~ NA, T ~ x_int)) %>%
     ggplot(aes(x = log_price)) +
     # ADD GEOMS
-    geom_line(aes(y = Q_buyer, color = "a")) +
-    geom_line(aes(y = Q_seller, color = "b")) +
-    geom_line(aes(y = Q_joint, color = "c")) +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+    geom_line(aes(y = Q_buyer, color = "a"), linewidth = .75, linetype = "solid") +
+    geom_line(aes(y = Q_seller, color = "b"), linewidth = .75, linetype = "solid") +
+    geom_line(aes(y = Q_joint, color = "c"), linewidth = .75, linetype = "solid") +
+    geom_line(data = baseline, aes(y = Q_buyer, color = "a"), linewidth = .75, linetype = "dashed") +
+    geom_line(data = baseline, aes(y = Q_seller, color = "b"), linewidth = .75, linetype = "dashed") +
+    geom_vline(aes(xintercept = x_int),
+               linetype = "dotted", linewidth = .75) +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
                        breaks = log10(c(.10, 5, 250)),
@@ -214,17 +220,18 @@ jpeg(here("Plots", "Figure 2 (Line) - Paneled Demand Curve.jpeg"),
     # ADD THEMES
     labs(x = "Price/Commodity", y = "Probability") +
     theme_classic() +
-    theme(legend.position   = c(.5, 1.05),
+    theme(legend.position   = c(.5, 1.125),
           legend.direction  = "horizontal",
           legend.title      = element_blank(),
           legend.background = element_rect(fill = "transparent", color = "transparent"),
-          axis.text.x       = element_text(size = 10, color = "black"),
+          axis.text.x       = element_blank(),
           axis.text.y       = element_text(size = 10, color = "black"),
-          axis.title        = element_text(size = 12),
+          axis.line         = element_line(linewidth = .75),
+          axis.ticks        = element_line(linewidth = .75, color = "black"),
           strip.text        = element_blank(),
           panel.spacing.x   = unit(.5, "cm"),
-          panel.spacing.y   = unit(.5, "cm"),
-          plot.margin       = unit(c(.75, .5, .05, .05), "cm")) +
+          panel.spacing.y   = unit(1, "cm"),
+          plot.margin       = unit(c(1.75, .5, .05, .05), "cm")) +
     coord_cartesian(clip = "off") +
     facet_rep_grid(condition~column)
   
@@ -232,21 +239,38 @@ dev.off()
 ```
 
 
-## Shaded
+# ------------------------------------------------------
+# Figure 2: Paneled Demand Curves (Solid BL)
 ```{r}
-jpeg(here("Plots", "Figure 2 (Shaded) - Paneled Demand Curve.jpeg"),
-     width = 14.6, height = 10, units = "cm", res = 300)
+# FOR SHOWING CHANGES FROM BASELINE AS DASHED LINES IN 2ND AND 3RD ROWS
+baseline = filter(buyer_seller_demand, condition == "baseline")
+solids = bind_rows(mutate(baseline, condition = "baseline", column = "Buyer", Q_seller = NA, Q_joint = NA),
+                   mutate(baseline, condition = "increase", column = "Buyer", Q_seller = NA, Q_joint = NA),
+                   mutate(baseline, condition = "decrease", column = "Buyer", Q_seller = NA, Q_joint = NA),
+                   mutate(baseline, condition = "baseline", column = "Seller", Q_buyer = NA, Q_joint = NA),
+                   mutate(baseline, condition = "increase", column = "Seller", Q_buyer = NA, Q_joint = NA),
+                   mutate(baseline, condition = "decrease", column = "Seller", Q_buyer = NA, Q_joint = NA),
+                   mutate(buyer_seller_demand, column = "Joint"))
+
+jpeg(here("Plots", "Figure 2 (alt) - Paneled Demand Curve.jpeg"),
+     width = 14.6, height = 12, units = "cm", res = 300)
 
   bind_rows(mutate(buyer_seller_demand, column = "Buyer", Q_seller = NA, Q_joint = NA),
-            mutate(buyer_seller_demand, column = "Joint"),
+            mutate(buyer_seller_demand, column = "Joint", Q_buyer = NA, Q_seller = NA, Q_joint = NA),
             mutate(buyer_seller_demand, column = "Seller", Q_buyer = NA, Q_joint = NA)) %>%
+    mutate(x_int = case_when(condition == "baseline" ~ log10(calculate_price(.0025)),
+                             condition == "increase" ~ log10(calculate_price(.000375)),
+                             condition == "decrease" ~ log10(calculate_price(.015))),
+           x_int = case_when(column == "Buyer" ~ NA, T ~ x_int)) %>%
     ggplot(aes(x = log_price)) +
     # ADD GEOMS
-    geom_line(aes(y = Q_buyer, color = "a")) +
-    geom_line(aes(y = Q_seller, color = "b")) +
-    geom_ribbon(aes(ymin = 0, ymax = Q_joint, color = "c"), alpha = .25) +
-    geom_line(aes(y = Q_joint), linewidth = .25) +
-    geom_vline(xintercept = log10(calculate_price(.0025)), linetype = "dotted") +
+    geom_line(aes(y = Q_buyer, color = "a"), linewidth = .75, linetype = "dashed") +
+    geom_line(aes(y = Q_seller, color = "b"), linewidth = .75, linetype = "dashed") +
+    geom_line(data = solids, aes(y = Q_buyer, color = "a"), linewidth = .75, linetype = "solid") +
+    geom_line(data = solids, aes(y = Q_seller, color = "b"), linewidth = .75, linetype = "solid") +
+    geom_line(data = solids, aes(y = Q_joint, color = "c"), linewidth = .75, linetype = "solid") +
+    geom_vline(aes(xintercept = x_int),
+               linetype = "dotted", linewidth = .75) +
     # ADD SCALES
     scale_x_continuous(expand = c(0, 0), limits = c(log10(price_ranges[1]), log10(price_ranges[2])),
                        breaks = log10(c(.10, 5, 250)),
@@ -254,28 +278,31 @@ jpeg(here("Plots", "Figure 2 (Shaded) - Paneled Demand Curve.jpeg"),
     scale_y_continuous(expand = c(0, 0), limits = c(0, 100),
                        breaks = c(0, 50, 100),
                        labels = c("0", "50%", "100%")) +
-    scale_color_manual("agent", values = c("a" = "black", "b" = "gray55", "c" = "black"),
+    scale_color_manual("agent", values = c("a" = "black", "b" = "gray55", "c" = "red3"),
                        labels = c("Buy", "Sell", "Transaction")) +
     # ADD THEMES
     labs(x = "Price/Commodity", y = "Probability") +
     theme_classic() +
-    theme(legend.position   = c(.5, 1.05),
+    theme(legend.position   = c(.5, 1.125),
           legend.direction  = "horizontal",
           legend.title      = element_blank(),
           legend.background = element_rect(fill = "transparent", color = "transparent"),
-          axis.text.x       = element_text(size = 10, color = "black"),
+          axis.text.x       = element_blank(),
           axis.text.y       = element_text(size = 10, color = "black"),
-          axis.title        = element_text(size = 12),
+          axis.line         = element_line(linewidth = .75),
+          axis.ticks        = element_line(linewidth = .75, color = "black"),
           strip.text        = element_blank(),
           panel.spacing.x   = unit(.5, "cm"),
-          panel.spacing.y   = unit(.5, "cm"),
-          plot.margin       = unit(c(.75, .5, .05, .05), "cm")) +
+          panel.spacing.y   = unit(1, "cm"),
+          plot.margin       = unit(c(1.75, .5, .05, .05), "cm")) +
     coord_cartesian(clip = "off") +
     facet_rep_grid(condition~column)
   
 dev.off()
 ```
 
+
+# ------------------------------------------------------
 
 
 
