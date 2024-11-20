@@ -52,29 +52,29 @@ make_condition_label = function(df, stacked = T){
     new_df = df %>% 
       mutate(condition =
              factor(condition, 
-                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
-                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    levels = c("Lo Dep (B1) Hi Sat (B2)", "Lo Dep (B1) Lo Sat (B2)",
+                               "Hi Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Lo Sat (B2)"),
                     ordered = T),
            condition_lab =
              factor(condition, 
-                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
-                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
-                    labels = c("Low Dep\nLow Sat", "High Dep\nLow Sat",
-                               "Low Dep\nHigh Sat", "High Dep\nHigh Sat"),
+                    levels = c("Lo Dep (B1) Hi Sat (B2)", "Lo Dep (B1) Lo Sat (B2)",
+                               "Hi Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Lo Sat (B2)"),
+                    labels = c("Low Dep\nHigh Sat", "Low Dep\nLow Sat",
+                               "High Dep\nHigh Sat", "High Dep\nLow Sat"),
                     ordered = T))
   } else {
     new_df = df %>% 
       mutate(condition =
              factor(condition, 
-                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
-                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
+                    levels = c("Lo Dep (B1) Hi Sat (B2)", "Lo Dep (B1) Lo Sat (B2)",
+                               "Hi Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Lo Sat (B2)"),
                     ordered = T),
            condition_lab =
              factor(condition, 
-                    levels = c("Lo Dep (B1) Lo Sat (B2)", "Hi Dep (B1) Lo Sat (B2)",
-                               "Lo Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Hi Sat (B2)"),
-                    labels = c("Low Dep Low Sat", "High Dep Low Sat",
-                               "Low Dep High Sat", "High Dep High Sat"),
+                    levels = c("Lo Dep (B1) Hi Sat (B2)", "Lo Dep (B1) Lo Sat (B2)",
+                               "Hi Dep (B1) Hi Sat (B2)", "Hi Dep (B1) Lo Sat (B2)"),
+                    labels = c("Low Dep High Sat", "Low Dep Low Sat",
+                               "High Dep High Sat", "High Dep Low Sat"),
                     ordered = T))
   }
   return(new_df)
@@ -387,6 +387,26 @@ dev.off()
 
 
 # ------------------------------------------------------
+# Summary Statistics
+```{r}
+population %>% 
+  group_by(condition) %>% 
+  reframe(buyer_alpha_avg = mean(buyer_alpha),
+          buyer_alpha_sd  = sd(buyer_alpha),
+          prob_buy_avg    = mean(prob.buy),
+          prob_buy_sd     = sd(prob.buy),
+          time_since_avg  = mean(time_since, na.rm = T),
+          time_since_sd   = sd(time_since, na.rm = T)) %>% 
+  mutate(buyer_alpha = paste0(round(buyer_alpha_avg, 5), " (", round(buyer_alpha_sd, 5), ")"),
+         prob_buy = paste0(round(prob_buy_avg, 2), " (", round(prob_buy_sd, 2), ")"),
+         time_since = paste0(round(time_since_avg, 2), " (", round(time_since_sd, 2), ")")) %>% 
+  select(-ends_with(c("avg", "sd")))
+  # mutate(buyer_alpha = paste0(format(round(buyer_alpha_avg, 5), scientific = T),
+  #                             "(", format(round(buyer_alpha_sd, 5), scientific = T), ")"))
+```
+
+
+# ------------------------------------------------------
 # Figure S1: Population-Level Purchase Probabilities
 ```{r, eval = T}
 full_individuals = individuals %>% 
@@ -439,7 +459,7 @@ dev.off()
 
 
 # ------------------------------------------------------
-# Animated Figure 3 & 4
+# Figure 3 & 4: Animated Demand Curves & Purchase Probabilities
 ## Make Demand Data
 ```{r}
 demand = individuals %>% 
